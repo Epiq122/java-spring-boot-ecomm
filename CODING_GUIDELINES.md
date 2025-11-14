@@ -66,7 +66,7 @@ These patterns and utilities can be applied to future Spring Boot projects with 
 
 ## 🏗️ Architectural Patterns
 
-### Layered Architecture
+### Layered Architecture ✅ *Implemented*
 
 ```
 Controller Layer (REST endpoints)
@@ -74,14 +74,17 @@ Controller Layer (REST endpoints)
 Service Layer (Business logic)
     ↓
 Repository Layer (Data access)
+    ↓
+Database (Persistence)
 ```
 
 **Key Rules:**
 
-- Controllers handle HTTP concerns only
+- Controllers handle HTTP concerns only (request/response, status codes)
 - Services contain business logic and orchestration
-- Repositories interact with the database
+- Repositories interact with the database (extend JpaRepository)
 - Never skip layers (e.g., Controller → Repository directly)
+- Each layer only depends on the layer directly below it
 
 ### DTO Pattern
 
@@ -126,6 +129,121 @@ public class EntityServiceImpl implements EntityService {
 - Follows Dependency Inversion Principle
 
 **When to Use:** For all service layer components in the application.
+
+---
+
+### JPA Repository Pattern ✅ *Implemented*
+
+**Purpose**: Leverage Spring Data JPA to eliminate boilerplate CRUD code and provide database abstraction.
+
+**Pattern:**
+
+```java
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface EntityRepository extends JpaRepository<Entity, Long> {
+    // Spring Data JPA provides these methods automatically:
+    // - save(Entity) - insert or update
+    // - findAll() - get all records
+    // - findById(Long) - get by ID
+    // - delete(Entity) - delete record
+    // - deleteById(Long) - delete by ID
+    // - existsById(Long) - check if exists
+    // - count() - count records
+
+    // Add custom query methods as needed:
+    // List<Entity> findByPropertyName(String propertyName);
+    // Optional<Entity> findByEmail(String email);
+}
+```
+
+**Benefits:**
+
+- No implementation code needed for basic CRUD
+- Type-safe queries
+- Automatic transaction management
+- Support for custom query methods using method naming conventions
+- Can add @Query annotations for complex queries
+
+**When to Use:** For all database entities requiring persistence operations.
+
+**Important Notes:**
+
+- Repository methods return `Optional<Entity>` for single results - always check with `.orElseThrow()`
+- `save()` method handles both insert (if ID is null) and update (if ID exists)
+- Extend `JpaRepository` (not CrudRepository) to get additional methods like `flush()`, `saveAndFlush()`
+
+---
+
+### JPA Entity Mapping Pattern ✅ *Implemented*
+
+**Purpose**: Map Java classes to database tables using JPA annotations for ORM.
+
+**Pattern:**
+
+```java
+import jakarta.persistence.*;
+
+@Entity(name = "table_name")  // Optional: specify custom table name
+public class Entity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)  // For MySQL auto-increment
+    private Long id;
+
+    @Column(nullable = false, length = 100)  // Optional: column constraints
+    private String name;
+
+    @Column(columnDefinition = "TEXT")  // Optional: specific SQL type
+    private String description;
+
+    // No-args constructor required by JPA
+    public Entity() {
+    }
+
+    // All-args constructor for convenience
+    public Entity(Long id, String name, String description) {
+        this.id = id;
+        this.name = name;
+        this.description = description;
+    }
+
+    // Getters and setters
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+    // ... more getters/setters
+}
+```
+
+**ID Generation Strategies:**
+
+- `GenerationType.IDENTITY` - Database auto-increment (MySQL, PostgreSQL)
+- `GenerationType.SEQUENCE` - Database sequence (Oracle, PostgreSQL)
+- `GenerationType.AUTO` - JPA chooses based on database
+- `GenerationType.UUID` - UUID generation
+
+**Critical Rules:**
+
+1. **Never manually set @GeneratedValue IDs** - Let the database handle it
+    - ❌ BAD: `entity.setId(1L); repository.save(entity);` for new entities
+    - ✅ GOOD: `repository.save(entity);` // ID assigned by database
+
+2. **Always provide no-args constructor** - Required by JPA/Hibernate
+
+3. **For updates, set the ID explicitly**:
+   ```java
+   entity.setId(existingId);
+   repository.save(entity);  // Updates instead of inserting
+   ```
+
+**When to Use:** For all domain objects that need database persistence.
 
 ---
 
@@ -276,6 +394,243 @@ public class EntityServiceImpl implements EntityService {
 
 ---
 
+### JPA Service Implementation Template ✅ *Implemented*
+
+**Purpose**: Standard service implementation using Spring Data JPA repository for database persistence.
+
+**Template:**
+
+```java
+import org.springframework.http.HttpStatus;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
+
+@Service
+public class EntityServiceImpl implements EntityService {
+
+    private final EntityRepository entityRepository;
+
+    // Constructor injection
+    public EntityServiceImpl(EntityRepository entityRepository) {
+        this.entityRepository = entityRepository;
+    }
+
+    @Override
+    public List<Entity> getAllEntities() {
+        return entityRepository.findAll();
+    }
+
+    @Override
+    public void createEntity(Entity entity) {
+        // DO NOT manually set ID if using @GeneratedValue
+        entityRepository.save(entity);
+    }
+
+    @Override
+    public Entity updateEntity(Entity entity, Long id) {
+        // Verify entity exists
+        entityRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Resource not found"));
+
+        // Set ID to ensure update (not insert)
+        entity.setId(id);
+
+        // Save (performs merge/update)
+        return entityRepository.save(entity);
+    }
+
+    @Override
+    public String deleteEntity(Long id) {
+        // Verify entity exists
+        Entity entity = entityRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Resource not found"));
+
+        entityRepository.delete(entity);
+        return "Entity with id: " + id + " deleted successfully";
+    }
+}
+```
+
+**Best Practices Applied:**
+
+- Constructor injection for repository dependency
+- Always verify entity exists before update/delete
+- Use `orElseThrow()` with ResponseStatusException for consistent error handling
+- For updates: explicitly set ID before calling save()
+- For creates: never manually set auto-generated IDs
+- Return appropriate types (entity for updates, String for deletes)
+
+**Common Patterns:**
+
+```java
+// Find by ID with custom exception
+Entity entity = repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Entity not found with id: " + id));
+
+// Check existence
+if(!repository.
+
+existsById(id)){
+        throw new
+
+ResponseStatusException(HttpStatus.NOT_FOUND, "Entity not found");
+}
+
+// Delete by ID directly
+        repository.
+
+deleteById(id);  // Throws exception if not found
+
+// Conditional save
+if(entity.
+
+getId() ==null){
+        repository.
+
+save(entity);  // Insert
+}else{
+        repository.
+
+save(entity);  // Update
+}
+```
+
+**When to Use:** For all service implementations that require database persistence with JPA.
+
+---
+
+### JPA Repository Template ✅ *Implemented*
+
+**Purpose**: Minimal repository interface extending JpaRepository for automatic CRUD operations.
+
+**Template:**
+
+```java
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public interface EntityRepository extends JpaRepository<Entity, Long> {
+    // Spring Data JPA provides these methods automatically:
+    // - save(Entity entity)
+    // - findAll()
+    // - findById(Long id)
+    // - delete(Entity entity)
+    // - deleteById(Long id)
+    // - existsById(Long id)
+    // - count()
+
+    // Add custom query methods using method naming convention:
+    // Example: List<Entity> findByName(String name);
+    // Example: Optional<Entity> findByEmail(String email);
+    // Example: List<Entity> findByNameContaining(String keyword);
+    // Example: List<Entity> findByPriceGreaterThan(Double price);
+}
+```
+
+**Customization Points:**
+
+- Replace `Entity` with your entity class name
+- Replace `Long` with your ID type (could be String, UUID, etc.)
+- Add custom query methods using Spring Data JPA naming conventions
+
+**Query Method Naming Conventions:**
+
+- `findBy{PropertyName}` - Find by exact match
+- `findBy{PropertyName}Containing` - LIKE search
+- `findBy{PropertyName}GreaterThan` - Greater than comparison
+- `findBy{PropertyName}And{Property2Name}` - Multiple conditions
+- `findBy{PropertyName}OrderBy{Property2Name}Asc` - With sorting
+
+**When to Use:** For every JPA entity that requires database operations.
+
+---
+
+### JPA Entity Template ✅ *Implemented*
+
+**Purpose**: Standard JPA entity class with proper annotations and conventions.
+
+**Template:**
+
+```java
+import jakarta.persistence.*;
+
+@Entity(name = "entities")  // Table name (optional, defaults to class name)
+public class Entity {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, length = 100)
+    private String name;
+
+    @Column(columnDefinition = "TEXT")
+    private String description;
+
+    // No-args constructor (REQUIRED by JPA)
+    public Entity() {
+    }
+
+    // All-args constructor (for convenience)
+    public Entity(Long id, String name, String description) {
+        this.id = id;
+        this.name = name;
+        this.description = description;
+    }
+
+    // Getters and Setters
+    public Long getId() {
+        return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
+    }
+}
+```
+
+**Customization Points:**
+
+- Change table name in `@Entity(name = "...")`
+- Adjust ID generation strategy based on database
+- Add column constraints (@Column annotations)
+- Add relationships (@OneToMany, @ManyToOne, etc.)
+- Add validation annotations (@NotNull, @Size, etc.)
+
+**Important Annotations:**
+
+- `@Entity` - Marks class as JPA entity
+- `@Id` - Marks primary key field
+- `@GeneratedValue` - Auto-generate ID values
+- `@Column` - Configure column properties
+- `@Transient` - Exclude field from database mapping
+
+**When to Use:** For all domain objects requiring database persistence.
+
+---
+
 ### Generic Response Wrapper
 
 *To be implemented*
@@ -295,6 +650,78 @@ public class EntityServiceImpl implements EntityService {
 ### Date/Time Utilities
 
 *To be implemented*
+
+---
+
+### Database Configuration Template ✅ *Implemented*
+
+**Purpose**: Standard application.properties configuration for H2 database development environment.
+
+**Template (H2 In-Memory for Development):**
+
+```properties
+# Application Name
+spring.application.name=your-app-name
+# H2 Database Configuration (Development)
+spring.h2.console.enabled=true
+spring.datasource.url=jdbc:h2:mem:testdb
+# Optional: spring.datasource.username=sa
+# Optional: spring.datasource.password=
+# JPA / Hibernate Configuration
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.format_sql=true
+spring.jpa.hibernate.ddl-auto=create-drop
+# Logging (Optional)
+# logging.level.org.hibernate.SQL=DEBUG
+# logging.level.org.hibernate.type.descriptor.sql.BasicBinder=TRACE
+```
+
+**H2 Console Access:**
+
+- URL: `http://localhost:8080/h2-console`
+- JDBC URL: `jdbc:h2:mem:testdb`
+- Username: `sa` (default)
+- Password: (leave blank)
+
+**DDL Auto Options:**
+
+- `create-drop` - Create schema on startup, drop on shutdown (dev/testing)
+- `create` - Create schema on startup, don't drop
+- `update` - Update schema if needed, never drop (careful!)
+- `validate` - Only validate schema, don't modify (production)
+- `none` - No automatic schema management
+
+**Template (MySQL for Production):**
+
+```properties
+# MySQL Database Configuration
+spring.datasource.url=jdbc:mysql://localhost:3306/dbname?useSSL=false&serverTimezone=UTC
+spring.datasource.username=${DB_USERNAME}
+spring.datasource.password=${DB_PASSWORD}
+spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
+# JPA / Hibernate Configuration
+spring.jpa.hibernate.ddl-auto=validate
+spring.jpa.show-sql=false
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MySQLDialect
+spring.jpa.properties.hibernate.format_sql=true
+# Connection Pool (HikariCP - default in Spring Boot)
+spring.datasource.hikari.maximum-pool-size=10
+spring.datasource.hikari.minimum-idle=5
+spring.datasource.hikari.connection-timeout=20000
+```
+
+**Best Practices:**
+
+1. **Never commit credentials** - Use environment variables (`${DB_USERNAME}`)
+2. **Use `validate` in production** - Schema changes via migration tools (Flyway/Liquibase)
+3. **Enable SQL logging only in dev** - `show-sql=false` in production for performance
+4. **H2 for testing/dev only** - Use production-like DB (MySQL/PostgreSQL) for staging/prod
+5. **Configure connection pooling** - Tune based on expected load
+
+**When to Use:**
+
+- H2 template: Early development, unit tests, quick prototyping
+- MySQL template: Staging, production, integration testing
 
 ---
 
@@ -525,6 +952,231 @@ class ResourceServiceTest {
 ---
 
 ## 💡 Lessons Learned & Best Practices
+
+### Common JPA/Hibernate Pitfalls ✅ *Documented*
+
+#### 1. StaleObjectStateException - Manual ID Assignment Conflict
+
+**Problem:**
+
+```java
+// ❌ WRONG - Causes StaleObjectStateException
+@Override
+public void createEntity(Entity entity) {
+    entity.setId(nextId++);  // Manually setting ID
+    repository.save(entity);  // Conflicts with @GeneratedValue
+}
+```
+
+**Error:**
+
+```
+org.hibernate.StaleObjectStateException: Row was updated or deleted by another transaction 
+(or unsaved-value mapping was incorrect): [Entity#2]
+```
+
+**Root Cause:**
+
+- When using `@GeneratedValue`, the database is responsible for generating IDs
+- Manually setting the ID confuses Hibernate's entity state management
+- Hibernate thinks it's an existing entity (detached) and tries to merge instead of insert
+
+**Solution:**
+
+```java
+// ✅ CORRECT - Let JPA/database handle ID generation
+@Override
+public void createEntity(Entity entity) {
+    repository.save(entity);  // ID will be auto-generated
+}
+```
+
+**Key Takeaway:** Never manually set `@GeneratedValue` IDs for new entities. Only set IDs explicitly when updating
+existing entities.
+
+---
+
+#### 2. Update vs Insert Confusion
+
+**Problem:** How does `repository.save()` know whether to INSERT or UPDATE?
+
+**Answer:**
+
+- If `entity.getId()` is `null` → INSERT
+- If `entity.getId()` is NOT `null` → UPDATE (merge)
+
+**Correct Update Pattern:**
+
+```java
+
+@Override
+public Entity updateEntity(Entity entity, Long id) {
+    // 1. Verify entity exists (throws exception if not found)
+    repository.findById(id)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+
+    // 2. Set the ID explicitly to ensure UPDATE not INSERT
+    entity.setId(id);
+
+    // 3. Save performs merge/update
+    return repository.save(entity);
+}
+```
+
+**Why set ID explicitly?**
+
+- The incoming entity might be a new DTO-mapped object with null ID
+- Setting the ID tells JPA "this is an existing entity, perform UPDATE"
+
+---
+
+#### 3. N+1 Query Problem
+
+**Problem:**
+
+```java
+// Lazy loading causes N+1 queries
+List<Order> orders = orderRepository.findAll();
+for(
+Order order :orders){
+        order.
+
+getCustomer().
+
+getName();  // Extra query for each order!
+}
+```
+
+**Solution - Use JOIN FETCH:**
+
+```java
+
+@Query("SELECT o FROM Order o JOIN FETCH o.customer")
+List<Order> findAllWithCustomer();
+```
+
+**Or use @EntityGraph:**
+
+```java
+
+@EntityGraph(attributePaths = {"customer"})
+List<Order> findAll();
+```
+
+---
+
+#### 4. Bidirectional Relationship Sync
+
+**Problem:** Not synchronizing both sides of a relationship
+
+**Solution:**
+
+```java
+
+@Entity
+public class Order {
+    @ManyToOne
+    private Customer customer;
+
+    public void setCustomer(Customer customer) {
+        this.customer = customer;
+        if (customer != null) {
+            customer.getOrders().add(this);  // Sync both sides
+        }
+    }
+}
+```
+
+---
+
+### Spring Boot Common Issues ✅ *Documented*
+
+#### 1. Constructor Injection with Multiple Implementations
+
+**Problem:** Multiple beans of same type cause autowiring conflicts
+
+**Solution:**
+
+```java
+// Use @Qualifier
+public EntityService(@Qualifier("primaryImpl") EntityRepository repo) {
+    this.repo = repo;
+}
+
+// Or use @Primary on one implementation
+@Service
+@Primary
+public class PrimaryEntityServiceImpl implements EntityService {
+    // ...
+}
+```
+
+---
+
+#### 2. Circular Dependency
+
+**Problem:** Service A depends on Service B, and B depends on A
+
+**Solution:**
+
+- Refactor to eliminate circular dependency (preferred)
+- Use `@Lazy` injection as temporary fix
+- Extract shared logic to a third service
+
+---
+
+### REST API Common Mistakes ✅ *Documented*
+
+#### 1. Returning Entities Instead of DTOs
+
+**Problem:**
+
+```java
+// ❌ Exposes internal structure, lazy loading issues, circular references
+@GetMapping
+public List<Entity> getAll() {
+    return repository.findAll();
+}
+```
+
+**Solution:**
+
+```java
+// ✅ Use DTOs for API contracts
+@GetMapping
+public List<EntityDTO> getAll() {
+    return repository.findAll().stream()
+            .map(mapper::toDTO)
+            .toList();
+}
+```
+
+---
+
+#### 2. Inconsistent Error Responses
+
+**Problem:** Different error formats across endpoints
+
+**Solution:** Use `@ControllerAdvice` for centralized exception handling
+
+```java
+
+@ControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponse> handleResponseStatus(ResponseStatusException ex) {
+        ErrorResponse error = new ErrorResponse(
+                ex.getStatusCode().value(),
+                ex.getReason(),
+                LocalDateTime.now()
+        );
+        return new ResponseEntity<>(error, ex.getStatusCode());
+    }
+}
+```
+
+---
 
 *This section will capture important insights, gotchas, and best practices discovered during development.*
 

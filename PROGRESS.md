@@ -33,6 +33,26 @@ service interface/implementation separation for flexibility.
 
 ---
 
+### Database Integration with Spring Data JPA - November 13, 2025
+
+**Time Spent:** ~2-3 hours  
+**Summary:** Integrated MySQL database using Spring Data JPA and Hibernate. Migrated from in-memory storage to database
+persistence with JpaRepository. Configured Category entity with @Entity annotation and auto-generated primary keys using
+@GeneratedValue strategy. Learned to troubleshoot common JPA issues including StaleObjectStateException caused by manual
+ID assignment conflicting with database auto-generation.
+
+**Key Learning Points:**
+
+- Spring Data JPA repository pattern extending JpaRepository<Entity, ID>
+- Entity mapping with @Entity, @Id, and @GeneratedValue annotations
+- Database auto-generation strategies (GenerationType.IDENTITY for MySQL)
+- Proper entity lifecycle management - avoiding manual ID assignment for auto-generated fields
+- JPA version control and optimistic locking concepts
+- Hibernate ORM configuration and automatic DDL generation
+- Database connection configuration via application.properties
+
+---
+
 *Note: This log will be updated as each section is completed.*
 
 

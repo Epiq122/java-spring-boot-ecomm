@@ -1,20 +1,34 @@
 package ca.robertgleason.project.model;
 
+
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+
+@Entity(name = "categories")
 public class Category {
-    private Long categoryID;
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long categoryId;
+
     private String categoryName;
 
-    public Category(Long categoryID, String categoryName) {
-        this.categoryID = categoryID;
+    public Category(Long categoryId, String categoryName) {
+        this.categoryId = categoryId;
         this.categoryName = categoryName;
     }
 
-    public Long getCategoryID() {
-        return categoryID;
+    public Category() {
     }
 
-    public void setCategoryID(Long categoryID) {
-        this.categoryID = categoryID;
+    public Long getCategoryId() {
+        return categoryId;
+    }
+
+    public void setCategoryId(Long categoryID) {
+        this.categoryId = categoryID;
     }
 
     public String getCategoryName() {

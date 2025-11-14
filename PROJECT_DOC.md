@@ -22,16 +22,18 @@ practices.
 - **Java 21** - Latest LTS version with modern language features
 - **Spring Boot 3.5.7** - Core framework
 - **Spring Web** - RESTful API development
+- **Spring Data JPA** - Database persistence and ORM
+- **Hibernate** - JPA implementation and ORM framework
+- **H2 Database** - In-memory relational database for development
 - **Maven** - Dependency management and build tool
 
 ### Planned Technologies
 
-- Spring Data JPA - Database persistence layer
 - Spring Security - Authentication and authorization
-- MySQL/PostgreSQL - Relational database
 - JWT - Token-based authentication
 - Lombok - Reduce boilerplate code
 - ModelMapper/MapStruct - DTO mapping
+- Bean Validation - Request validation
 
 ---
 
@@ -42,17 +44,23 @@ practices.
 - ✅ Project initialization with Spring Boot 3.5.7
 - ✅ Maven project structure
 - ✅ Basic REST API setup
-- ✅ **Category Management API (CRUD)**
+- ✅ **Database Integration with Spring Data JPA**
+    - H2 in-memory database configuration
+    - Hibernate ORM integration
+    - JpaRepository pattern for data access
+    - Entity mapping with JPA annotations
+    - Auto-generated primary keys (IDENTITY strategy)
+    - H2 console enabled for database inspection
+- ✅ **Category Management API (CRUD with Database Persistence)**
     - GET `/api/public/categories` - Retrieve all categories
     - POST `/api/public/categories` - Create new category
-    - PUT `/api/public/categories/{categoryID}` - Update existing category
-    - DELETE `/api/admin/categories/{categoryID}` - Delete category
-    - In-memory data storage with auto-incrementing IDs
+    - PUT `/api/public/categories/{categoryId}` - Update existing category
+    - DELETE `/api/admin/categories/{categoryId}` - Delete category
+    - Database persistence with H2
     - Exception handling for not found resources
 
 ### Planned Features
 
-- Database persistence with Spring Data JPA
 - User authentication and authorization (JWT)
 - Product catalog management (CRUD operations)
 - Shopping cart functionality
@@ -112,7 +120,7 @@ sb-ecomm/
 
 ## 🔑 Key Implementation Notes
 
-### Category Management (In-Memory Implementation)
+### Category Management (Database Persistence with JPA)
 
 **Files:**
 
@@ -121,22 +129,48 @@ sb-ecomm/
 - [`CategoryService.java`](src/main/java/ca/robertgleason/project/service/CategoryService.java) - Service interface
 - [`CategoryServiceImpl.java`](src/main/java/ca/robertgleason/project/service/CategoryServiceImpl.java) - Service
   implementation
-- [`Category.java`](src/main/java/ca/robertgleason/project/model/Category.java) - Domain model
+- [`CategoryRepository.java`](src/main/java/ca/robertgleason/project/repositories/CategoryRepository.java) - JPA
+  repository interface
+- [`Category.java`](src/main/java/ca/robertgleason/project/model/Category.java) - JPA entity
 
 **Technical Decisions:**
 
-1. **In-Memory Storage**: Using ArrayList for temporary data storage (will be replaced with JPA repository later)
-2. **Auto-incrementing IDs**: Manual ID generation with Long counter (database will handle this in production)
-3. **Service Interface Pattern**: Separate interface and implementation for better testability and future flexibility
-4. **Constructor Injection**: Used for CategoryService dependency - promotes immutability and easier testing
-5. **Exception Handling**: ResponseStatusException for HTTP error responses with appropriate status codes
-6. **Path Variable Naming**: Using `categoryID` consistently across endpoints for clarity
+1. **JpaRepository Pattern**: Extended `JpaRepository<Category, Long>` for automatic CRUD implementation - Spring
+   provides all basic operations without custom code
+2. **Entity Mapping**: Used `@Entity(name = "categories")` to map Category class to database table
+3. **Auto-Generated IDs**: Configured `@GeneratedValue(strategy = GenerationType.IDENTITY)` for auto-increment
+   primary keys
+4. **H2 In-Memory Database**: Using H2 for development - fast, embedded, no external setup required
+5. **Service Interface Pattern**: Maintained interface/implementation separation for testability and flexibility
+6. **Constructor Injection**: Used for CategoryRepository dependency - promotes immutability and easier testing
+7. **Exception Handling**: ResponseStatusException for HTTP error responses with appropriate status codes
+
+**Common Pitfalls Encountered & Solutions:**
+
+1. **StaleObjectStateException Issue**: Initially attempted to manually set categoryId in createCategory method,
+   conflicting with database auto-generation
+    - **Solution**: Removed manual ID assignment - let JPA/Hibernate handle ID generation automatically
+    - **Lesson**: Never manually set IDs when using @GeneratedValue
+
+2. **Update Method Pattern**: Proper way to update entities with JPA
+    - First verify entity exists with findById()
+    - Set the ID on incoming entity to ensure update (not insert)
+    - Call repository.save() which performs merge operation
+    - **Pattern**: `category.setCategoryId(categoryId); savedCategory = repository.save(category);`
+
+**Database Configuration:**
+
+- H2 in-memory database configured in `application.properties`
+- H2 console enabled at `/h2-console` for database inspection
+- Hibernate auto-DDL set to `create-drop` for development (recreates schema on each restart)
+- SQL logging enabled for debugging (`show-sql=true`, `format_sql=true`)
+- Entity tables automatically created on application startup
 
 **Gotchas & Notes:**
 
-- Current implementation is stateless - data resets on application restart
-- Update endpoint doesn't return the updated category in response body (could be improved)
-- No validation on incoming request data yet (to be added with Bean Validation)
+- JpaRepository provides methods out-of-the-box: save(), findAll(), findById(), delete(), etc.
+- save() method performs both insert and update (insert if ID is null, update if ID exists)
+- Always check entity existence before update/delete operations
 - Public vs Admin endpoint differentiation established (`/public/` vs `/admin/`)
 
 *This section will be expanded as more features are implemented*
