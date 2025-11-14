@@ -51,13 +51,21 @@ practices.
     - Entity mapping with JPA annotations
     - Auto-generated primary keys (IDENTITY strategy)
     - H2 console enabled for database inspection
-- ✅ **Category Management API (CRUD with Database Persistence)**
+    - Custom query methods using JPA naming conventions
+- ✅ **Custom Exception Handling**
+    - `ResourceNotFoundException` - For 404 not found scenarios
+    - `APIException` - For business logic violations (400 Bad Request)
+    - Formatted error messages with resource details
+    - Constructor overloading for flexible exception creation
+- ✅ **Category Management API (CRUD with Database Persistence & Validation)**
     - GET `/api/public/categories` - Retrieve all categories
-    - POST `/api/public/categories` - Create new category
+    - POST `/api/public/categories` - Create new category with duplicate prevention
     - PUT `/api/public/categories/{categoryId}` - Update existing category
     - DELETE `/api/admin/categories/{categoryId}` - Delete category
     - Database persistence with H2
-    - Exception handling for not found resources
+    - Business logic validation (duplicate category name prevention)
+    - Custom exception handling for meaningful error responses
+    - Resource existence validation before operations
 
 ### Planned Features
 
@@ -128,10 +136,14 @@ sb-ecomm/
   endpoints
 - [`CategoryService.java`](src/main/java/ca/robertgleason/project/service/CategoryService.java) - Service interface
 - [`CategoryServiceImpl.java`](src/main/java/ca/robertgleason/project/service/CategoryServiceImpl.java) - Service
-  implementation
+  implementation with validation
 - [`CategoryRepository.java`](src/main/java/ca/robertgleason/project/repositories/CategoryRepository.java) - JPA
-  repository interface
+  repository interface with custom queries
 - [`Category.java`](src/main/java/ca/robertgleason/project/model/Category.java) - JPA entity
+- [`ResourceNotFoundException.java`](src/main/java/ca/robertgleason/project/exceptions/ResourceNotFoundException.java) -
+  Custom 404 exception
+- [`APIException.java`](src/main/java/ca/robertgleason/project/exceptions/APIException.java) - Custom business logic
+  exception
 
 **Technical Decisions:**
 
@@ -172,6 +184,9 @@ sb-ecomm/
 - save() method performs both insert and update (insert if ID is null, update if ID exists)
 - Always check entity existence before update/delete operations
 - Public vs Admin endpoint differentiation established (`/public/` vs `/admin/`)
+- Custom exceptions provide better error messages than generic ResponseStatusException
+- Business validation (duplicate checks) should happen in service layer before persistence
+- Custom query methods follow naming conventions: `findBy{PropertyName}` returns matching entity or null
 
 *This section will be expanded as more features are implemented*
 progresses.*
@@ -240,5 +255,5 @@ Building this project as part of my full-stack development journey.
 
 ---
 
-*Last Updated: November 12, 2025*
+*Last Updated: November 13, 2025*
 

@@ -469,8 +469,7 @@ public class EntityServiceImpl implements EntityService {
 ```java
 // Find by ID with custom exception
 Entity entity = repository.findById(id)
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "Entity not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Entity", "id", id));
 
 // Check existence
 if(!repository.
@@ -478,13 +477,21 @@ if(!repository.
 existsById(id)){
         throw new
 
-ResponseStatusException(HttpStatus.NOT_FOUND, "Entity not found");
+ResourceNotFoundException("Entity","id",id);
+}
+
+// Check for duplicates using custom query
+Entity existing = repository.findByName(name);
+if(existing !=null){
+        throw new
+
+APIException("Entity with name '"+name +"' already exists");
 }
 
 // Delete by ID directly
         repository.
 
-deleteById(id);  // Throws exception if not found
+deleteById(id);  // Throws EmptyResultDataAccessException if not found
 
 // Conditional save
 if(entity.
@@ -953,6 +960,84 @@ class ResourceServiceTest {
 
 ## 💡 Lessons Learned & Best Practices
 
+### Business Validation Patterns ✅ *Implemented*
+
+**Where to Validate:**
+
+- **Service Layer**: Business logic validation (duplicates, state transitions, business rules)
+- **Controller Layer**: Input validation (@Valid, @NotNull) - to be implemented
+- **Database Layer**: Constraints (unique, not null, foreign keys)
+
+**Validation Pattern Examples:**
+
+```java
+
+@Service
+public class EntityServiceImpl implements EntityService {
+
+    // Pattern 1: Duplicate Prevention
+    @Override
+    public void createEntity(Entity entity) {
+        Entity existing = repository.findByUniqueField(entity.getUniqueField());
+        if (existing != null) {
+            throw new APIException("Entity with this field already exists");
+        }
+        repository.save(entity);
+    }
+
+    // Pattern 2: Empty Collection Check
+    @Override
+    public List<Entity> getAllEntities() {
+        List<Entity> entities = repository.findAll();
+        if (entities.isEmpty()) {
+            throw new APIException("No entities found");
+        }
+        return entities;
+    }
+
+    // Pattern 3: State Validation Before Operation
+    @Override
+    public void deleteEntity(Long id) {
+        Entity entity = repository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Entity", "id", id));
+
+        if (entity.getStatus().equals("LOCKED")) {
+            throw new APIException("Cannot delete locked entity");
+        }
+
+        repository.delete(entity);
+    }
+
+    // Pattern 4: Relationship Validation
+    @Override
+    public void assignToParent(Long entityId, Long parentId) {
+        Entity entity = repository.findById(entityId)
+                .orElseThrow(() -> new ResourceNotFoundException("Entity", "id", entityId));
+
+        Entity parent = repository.findById(parentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Parent", "id", parentId));
+
+        if (entity.getParent() != null) {
+            throw new APIException("Entity already assigned to a parent");
+        }
+
+        entity.setParent(parent);
+        repository.save(entity);
+    }
+}
+```
+
+**Best Practices:**
+
+- ✅ Validate in service layer before persistence
+- ✅ Use custom exceptions for business validation failures
+- ✅ Provide clear, user-friendly error messages
+- ✅ Check existence before state-changing operations
+- ✅ Use custom repository queries for uniqueness checks
+- ✅ Fail fast - validate early in the method
+
+---
+
 ### Common JPA/Hibernate Pitfalls ✅ *Documented*
 
 #### 1. StaleObjectStateException - Manual ID Assignment Conflict
@@ -1030,7 +1115,65 @@ public Entity updateEntity(Entity entity, Long id) {
 
 ---
 
-#### 3. N+1 Query Problem
+#### 3. Custom Exceptions vs ResponseStatusException ✅ *Implemented*
+
+**Problem:** When should you use custom exceptions instead of `ResponseStatusException`?
+
+**ResponseStatusException Approach:**
+
+```java
+// ❌ Less ideal - Generic exception, harder to handle globally
+Entity entity = repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "Resource not found"));
+```
+
+**Custom Exception Approach:**
+
+```java
+// ✅ Better - Specific exception with detailed context
+Entity entity = repository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Entity", "id", id));
+```
+
+**Advantages of Custom Exceptions:**
+
+1. **Better Error Messages**: Include resource details automatically
+   ```
+   "Category not found with categoryId: 123"
+   vs
+   "Resource not found"
+   ```
+
+2. **Global Exception Handling**: Use @ControllerAdvice to handle all instances
+   ```java
+   @ExceptionHandler(ResourceNotFoundException.class)
+   public ResponseEntity<?> handleResourceNotFound(ResourceNotFoundException ex) {
+       // Centralized error response formatting
+   }
+   ```
+
+3. **Easier Logging & Debugging**: Store context fields (resourceName, fieldId)
+   ```java
+   logger.error("Resource {} not found with {}: {}", 
+       ex.getResourceName(), ex.getField(), ex.getFieldId());
+   ```
+
+4. **API Consistency**: All 404 errors follow same format
+
+5. **Extensibility**: Easy to add error codes, timestamps, stack traces
+
+**When to Use Each:**
+
+- **Custom Exceptions**: Production applications, when you need global handling, detailed logging
+- **ResponseStatusException**: Quick prototyping, simple applications, one-off error cases
+
+**Key Takeaway:** Invest in custom exception classes early. They provide better error messages, enable global exception
+handling with @ControllerAdvice, and make debugging much easier.
+
+---
+
+#### 4. N+1 Query Problem
 
 **Problem:**
 

@@ -53,6 +53,27 @@ ID assignment conflicting with database auto-generation.
 
 ---
 
+### Custom Exception Handling & Business Logic Validation - November 13, 2025
+
+**Time Spent:** ~2 hours  
+**Summary:** Implemented custom exception classes (`ResourceNotFoundException` and `APIException`) to provide meaningful
+error messages and proper HTTP responses. Added business logic validation to prevent duplicate category names and ensure
+proper resource existence checks before update/delete operations. Learned the importance of using custom exceptions over
+generic `ResponseStatusException` for better error handling, logging, and API consistency. Integrated custom query
+methods in JPA repository (`findByCategoryName`) for validation purposes.
+
+**Key Learning Points:**
+
+- Creating custom exception classes extending RuntimeException
+- Formatting dynamic error messages with String.format()
+- Using constructor overloading for different exception scenarios (String vs Long field values)
+- Business logic validation in service layer (duplicate prevention)
+- Custom JPA repository query methods using naming conventions
+- Global exception handling patterns with custom exceptions
+- Proper exception propagation through application layers
+
+---
+
 *Note: This log will be updated as each section is completed.*
 
 
